@@ -236,6 +236,8 @@ void PulseAudioComponent::drain_rx_() {
 
         process_packet_(rx_ + 20, payload_len);
 
+        if (state_ == PAState::Disconnected) break;   // disconnect_() reset rx_len_
+
         uint32_t total = 20 + payload_len;
         memmove(rx_, rx_ + total, rx_len_ - total);
         rx_len_ -= total;
