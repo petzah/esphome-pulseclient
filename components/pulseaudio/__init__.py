@@ -12,7 +12,7 @@ AUTO_LOAD = ["number", "switch"]
 
 pulseaudio_ns = cg.esphome_ns.namespace("pulseaudio")
 PulseAudioComponent = pulseaudio_ns.class_(
-    "PulseAudioComponent", cg.Component, cg.Nameable
+    "PulseAudioComponent", cg.Component
 )
 PulseAudioVolumeNumber = pulseaudio_ns.class_(
     "PulseAudioVolumeNumber", number.Number
