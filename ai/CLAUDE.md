@@ -68,7 +68,21 @@ remote-pipewire-control/
 | PA_TAG_SAMPLE_SPEC| 'a'  | format(u8) + channels(u8) + rate(u32)|
 | PA_TAG_CHANNEL_MAP| 'm'  | n(u8) + n channel bytes          |
 | PA_TAG_CVOLUME    | 'v'  | n(u8) + n * u32 volumes          |
-| PA_TAG_PROPLIST   | 'P'  | key(string) + value(arbitrary) + STRING_NULL terminator|
+| PA_TAG_PROPLIST   | 'P'  | see proplist wire format below   |
+
+### Proplist wire format (critical — easy to get wrong)
+
+Each proplist entry on the wire is:
+```
+'P'                         ← TAG_PROPLIST (once, at start)
+'t' + key_str + '\0'        ← key as TAG_STRING
+'L' + u32(value_len)        ← value length as TAG_U32  ← REQUIRED, easy to miss
+'x' + u32(value_len) + data ← value as TAG_ARBITRARY
+'N'                         ← TAG_STRING_NULL terminator
+```
+
+The `TAG_U32` length field before `TAG_ARBITRARY` is **mandatory**. Omitting it causes
+`PA_ERR_PROTOCOL (code 7)` on `SET_CLIENT_NAME`.
 
 ### Command codes
 
@@ -79,8 +93,11 @@ remote-pipewire-control/
 | PA_CMD_AUTH           | 8     |
 | PA_CMD_SET_CLIENT_NAME| 9     |
 | PA_CMD_GET_SINK_INFO  | 21    |
-| PA_CMD_SET_SINK_VOLUME| 37    |
-| PA_CMD_SET_SINK_MUTE  | 40    |
+| PA_CMD_SET_SINK_VOLUME| **36** |
+| PA_CMD_SET_SINK_MUTE  | **39** |
+
+> **Note**: values 36/39 confirmed empirically against pipewire-pulse 1.4.2.
+> The enum has more entries between 32 and 36 than commonly documented.
 
 ### Protocol constants
 
@@ -102,8 +119,8 @@ CLIENT                              SERVER
   │── GET_SINK_INFO (@DEFAULT_SINK@)▶│   payload: U32(CMD_GET_SINK_INFO) U32(tag) U32(0xFFFFFFFF) STR("@DEFAULT_SINK@")
   │ ◀── REPLY (ch, volume, muted) ── │   → parse_sink_info_reply_
   │                                  │     index(u32) name(str) desc(str) sample_spec(a) channel_map(m) module_idx(u32) cvolume(v) muted(bool)
-  │── SET_SINK_VOLUME ──────────────▶│   U32(CMD_SET_SINK_VOLUME) U32(tag) U32(0xFFFFFFFF) STR("@DEFAULT_SINK@") CVOLUME(channels, vol)
-  │── SET_SINK_MUTE ────────────────▶│   U32(CMD_SET_SINK_MUTE)   U32(tag) U32(0xFFFFFFFF) STR("@DEFAULT_SINK@") BOOL(muted)
+  │── SET_SINK_VOLUME ──────────────▶│   U32(CMD_SET_SINK_VOLUME) U32(tag) U32(sink_index_) STR_NULL CVOLUME(channels, vol)
+  │── SET_SINK_MUTE ────────────────▶│   U32(CMD_SET_SINK_MUTE)   U32(tag) U32(sink_index_) STR_NULL BOOL(muted)
 ```
 
 - Cookie is 256 zero bytes for anonymous auth (server must have `auth-anonymous=true`)
@@ -112,6 +129,8 @@ CLIENT                              SERVER
 - Reverse: `pct = (float)((uint64_t)avg_vol * 100 / 65536)`
 - For multi-channel: average all channel volumes when reading, set all to same value when writing
 - Socket is non-blocking (O_NONBLOCK), recv uses MSG_DONTWAIT
+- **`@DEFAULT_SINK@` works for GET_SINK_INFO but NOT for SET commands** — pipewire-pulse returns
+  `PA_ERR_NOENTITY (code 5)`. Store `sink_index_` from the GET reply and use it for all SET commands.
 
 ### State machine
 
@@ -131,24 +150,33 @@ Disconnected → Authenticating → SettingClientName → GettingSinkInfo → Re
 ESPHome codegen. Key points:
 - `DEPENDENCIES = ["network"]`, `AUTO_LOAD = ["number", "switch"]`
 - Classes: `PulseAudioComponent(Component)`, `PulseAudioVolumeNumber(Number)`, `PulseAudioMuteSwitch(Switch)`
-- Config schema: `host` (required string), `port` (optional, default 4713), `cookie` (optional, 512 hex chars validated), `volume` (NUMBER_SCHEMA), `mute` (SWITCH_SCHEMA)
+- Config schema: `host` (required string), `port` (optional, default 4713), `cookie` (optional, 512 hex chars validated), `volume`, `mute`
 - Cookie validation: strip spaces/colons, lowercase, must be exactly 512 hex chars
 - `to_code`: register component, call `set_host`, `set_port`, optionally `set_cookie_hex`
 - Volume number: `new_number(config, min_value=0, max_value=100, step=1)` then `var.set_volume_number(vol)`
 - Mute switch: `new_switch(config)` then `var.set_mute_switch(mute)`
 
+**ESPHome 2026.3.0+ API requirements (these replaced older APIs that no longer exist):**
+- `CONF_HOST`, `CONF_PORT` removed from `esphome.const` → define locally as `"host"`, `"port"`
+- `ICON_*`, `UNIT_*`, `DEVICE_CLASS_*` removed → don't import them (unused anyway)
+- `cg.Nameable` removed from `esphome.codegen` → omit it, `Component` is sufficient
+- `number.NUMBER_SCHEMA` / `switch.SWITCH_SCHEMA` removed → use `number.number_schema(ClassName)` / `switch.switch_schema(ClassName)`
+
 ```python
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import number, switch
-from esphome.const import CONF_ID, CONF_HOST, CONF_PORT, UNIT_PERCENT, ICON_VOLUME_HIGH, ICON_VOLUME_OFF, DEVICE_CLASS_SOUND
+from esphome.const import CONF_ID
+
+CONF_HOST = "host"   # removed from esphome.const in 2026.3.0
+CONF_PORT = "port"   # removed from esphome.const in 2026.3.0
 
 CODEOWNERS = ["@you"]
 DEPENDENCIES = ["network"]
 AUTO_LOAD = ["number", "switch"]
 
 pulseaudio_ns = cg.esphome_ns.namespace("pulseaudio")
-PulseAudioComponent = pulseaudio_ns.class_("PulseAudioComponent", cg.Component, cg.Nameable)
+PulseAudioComponent = pulseaudio_ns.class_("PulseAudioComponent", cg.Component)  # Nameable removed in 2026.3.0
 PulseAudioVolumeNumber = pulseaudio_ns.class_("PulseAudioVolumeNumber", number.Number)
 PulseAudioMuteSwitch = pulseaudio_ns.class_("PulseAudioMuteSwitch", switch.Switch)
 
@@ -167,8 +195,9 @@ def validate_cookie(value):
         raise cv.Invalid("cookie must contain only hex characters (0-9, a-f)")
     return value
 
-VOLUME_SCHEMA = number.NUMBER_SCHEMA.extend({cv.GenerateID(): cv.declare_id(PulseAudioVolumeNumber)})
-MUTE_SCHEMA   = switch.SWITCH_SCHEMA.extend({cv.GenerateID(): cv.declare_id(PulseAudioMuteSwitch)})
+# number_schema()/switch_schema() replace NUMBER_SCHEMA/SWITCH_SCHEMA removed in 2026.3.0
+VOLUME_SCHEMA = number.number_schema(PulseAudioVolumeNumber)
+MUTE_SCHEMA   = switch.switch_schema(PulseAudioMuteSwitch)
 
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(PulseAudioComponent),
@@ -270,11 +299,14 @@ Clamp, set want flags. If already Ready: send immediately.
 
 ### `send_set_volume_()`
 - `vol = (uint32_t)((volume_ / 100.0f) * PA_VOLUME_NORM)`
-- Build: `U32(CMD_SET_SINK_VOLUME)` `U32(tag)` `U32(0xFFFFFFFF)` `STR("@DEFAULT_SINK@")` `CVOLUME(channels_, vol)`
+- Build: `U32(CMD_SET_SINK_VOLUME)` `U32(tag)` `U32(sink_index_)` `STR_NULL` `CVOLUME(channels_, vol)`
+- **Use `sink_index_` (from GET_SINK_INFO reply) + null string, NOT `PA_INVALID_INDEX` + `"@DEFAULT_SINK@"`**
+  — pipewire-pulse does not resolve `@DEFAULT_SINK@` alias in SET commands (returns PA_ERR_NOENTITY)
 - `publish_state(volume_)` on volume_number_
 
 ### `send_set_mute_()`
-- Build: `U32(CMD_SET_SINK_MUTE)` `U32(tag)` `U32(0xFFFFFFFF)` `STR("@DEFAULT_SINK@")` `BOOL(muted_)`
+- Build: `U32(CMD_SET_SINK_MUTE)` `U32(tag)` `U32(sink_index_)` `STR_NULL` `BOOL(muted_)`
+- Same note: use real `sink_index_`, not `@DEFAULT_SINK@`
 - `publish_state(muted_)` on mute_switch_
 
 ### `send_packet_(PktBuf&)`
@@ -284,7 +316,7 @@ Clamp, set want flags. If already Ready: send immediately.
 ### `drain_rx_()`
 - `recv` loop with MSG_DONTWAIT until exhausted, accumulate into `rx_[4096]`
 - Inner loop: need ≥20 bytes for header; read payload_len from rx_[0..3] BE
-- If complete packet: `process_packet_(rx_+20, payload_len)`, memmove remainder
+- If complete packet: `process_packet_(rx_+20, payload_len)`, then **check `state_ == Disconnected` before memmove** — `process_packet_` can call `disconnect_()` which resets `rx_len_=0`, and `rx_len_ - total` would unsigned-underflow to ~4 billion, crashing memmove. Break the loop if disconnected.
 
 ### `process_packet_(payload, len)`
 - `TagReader r`; read `cmd` and `tag` via `expectU32()`
@@ -296,7 +328,8 @@ Clamp, set want flags. If already Ready: send immediately.
   - Ready: no-op (ACKs for SET commands)
 
 ### `parse_sink_info_reply_(payload, len)`
-- Skip: `expectU32()` (index), `skipStr()` (name), `skipStr()` (description)
+- `sink_index_ = expectU32()` — **store the real sink index** for use in SET commands
+- `skipStr()` (name), `skipStr()` (description)
 - `channels_ = readSampleSpec()` — validate 1–32
 - `skipChannelMap()`, `expectU32()` (module index)
 - `avg_vol = readCVolume()` → `volume_ = (float)((uint64_t)avg_vol * 100 / PA_VOLUME_NORM)`
@@ -453,7 +486,17 @@ xxd -p ~/.config/pulse/cookie | tr -d '\n'
 2. **Non-blocking I/O**: `O_NONBLOCK` + `MSG_DONTWAIT` — never blocks ESPHome loop()
 3. **Want flags**: `want_volume_` / `want_mute_` queue commands if not yet Ready; sent in loop()
 4. **Anonymous auth**: zero cookie works when `auth-anonymous=true` on server
-5. **Single sink**: always targets `@DEFAULT_SINK@` by name, index = 0xFFFFFFFF
+5. **Sink index for SET commands**: `@DEFAULT_SINK@` is resolved only for `GET_SINK_INFO`. Store the returned `sink_index_` and use it with a null name for all `SET_SINK_VOLUME` / `SET_SINK_MUTE` commands — pipewire-pulse returns `PA_ERR_NOENTITY` otherwise.
 6. **Channel preservation**: reads channel count from sink info, uses it for SET_SINK_VOLUME
 7. **PktBuf capacity 600 bytes**: sufficient for all packets (auth packet is largest at ~280 bytes)
 8. **RX buffer 4096 bytes**: sufficient for sink info reply which can be ~500 bytes
+9. **Disconnect guard in drain_rx_**: after `process_packet_()`, check `state_ == Disconnected` before memmove — `disconnect_()` resets `rx_len_=0` and the unsigned subtraction would underflow
+
+## Known bugs fixed (lessons learned)
+
+| Bug | Symptom | Root cause | Fix |
+|-----|---------|------------|-----|
+| Proplist missing length tag | `PA_ERR_PROTOCOL (7)` on `SET_CLIENT_NAME` | Proplist value wire format is `U32(len) + ARBITRARY(len, data)`, not just `ARBITRARY` | Add `putU32(vlen)` before `putArbitrary()` in `putProplistStr` |
+| memmove crash after disconnect | `LoadStoreError` on boot | `process_packet_` calls `disconnect_()` → `rx_len_=0`; `rx_len_ - total` underflows | Check `state_ == Disconnected` before memmove |
+| Wrong SET command codes | `PA_ERR_PROTOCOL (7)` on SET_SINK_VOLUME | SET_SINK_VOLUME=36, SET_SINK_MUTE=39 (not 37/40) | Correct constants |
+| `@DEFAULT_SINK@` in SET commands | `PA_ERR_NOENTITY (5)` on SET_SINK_MUTE/VOLUME | pipewire-pulse only resolves alias in GET, not SET | Store real `sink_index_` from GET reply |

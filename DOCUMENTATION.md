@@ -292,6 +292,20 @@ The component converts linearly: `pa_vol = (percent / 100) × 65536`.
 
 ---
 
+## ESPHome version compatibility
+
+This component requires **ESPHome 2026.3.0 or later**. The following ESPHome
+API changes are already handled in the current codebase:
+
+| Removed API | Replacement used |
+|---|---|
+| `CONF_HOST`, `CONF_PORT` from `esphome.const` | Defined locally as `"host"`, `"port"` |
+| `ICON_*`, `UNIT_*`, `DEVICE_CLASS_*` from `esphome.const` | Removed (were unused) |
+| `cg.Nameable` from `esphome.codegen` | Removed (not needed for this component) |
+| `number.NUMBER_SCHEMA` / `switch.SWITCH_SCHEMA` | `number.number_schema()` / `switch.switch_schema()` |
+
+---
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
@@ -301,3 +315,4 @@ The component converts linearly: `pa_vol = (percent / 100) × 65536`.
 | `DNS lookup failed` | Wrong `host` value | Use IP address instead of hostname, or ensure mDNS resolves |
 | Component stuck in `GettingSinkInfo` | No default sink set | Run `pactl info` on host and confirm `Default Sink` is not empty |
 | Volume jumps on encoder | `resolution` too high | Set `resolution: 1` in `rotary_encoder` |
+| `Unable to import component` | ESPHome API changed | Ensure you are using the latest version from the repository |
