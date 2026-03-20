@@ -1,0 +1,108 @@
+substitutions:
+  device_name: pipewire-control
+
+esphome:
+  name: ${device_name}
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "${device_name} Fallback"
+    password: !secret ap_password
+
+logger:
+api:
+ota:
+  platform: esphome
+
+external_components:
+  - source:
+      type: git
+      url: https://github.com/petzah/esphome-pulseclient
+
+# ── PulseAudio / PipeWire component ───────────────────────────────────────────
+pulseaudio:
+  host: "192.168.1.100"   # IP of machine running pipewire-pulse
+  port: 4713
+  volume:
+    name: "Living Room Volume"
+    id: living_room_volume
+    icon: mdi:volume-high
+  mute:
+    name: "Living Room Mute"
+    id: living_room_mute
+    icon: mdi:volume-off
+
+# ── Scripts for repeated volume change while button is held ───────────────────
+script:
+  - id: volume_down_script
+    mode: restart
+    then:
+      - while:
+          condition:
+            binary_sensor.is_on: btn_gpio35
+          then:
+            - number.decrement:
+                id: living_room_volume
+                cycle: false
+            - delay: 200ms
+
+  - id: volume_up_script
+    mode: restart
+    then:
+      - while:
+          condition:
+            binary_sensor.is_on: btn_gpio0
+          then:
+            - number.increment:
+                id: living_room_volume
+                cycle: false
+            - delay: 200ms
+
+# ── Buttons ───────────────────────────────────────────────────────────────────
+
+binary_sensor:
+  # GPIO35 — short press: mute/unmute  |  long press (hold): volume down
+  # Note: GPIO35 is input-only on ESP32, no internal pull-up available.
+  # Wire with an external 10 kΩ pull-up resistor to 3V3.
+  - platform: gpio
+    pin:
+      number: GPIO35
+      inverted: true    # button pulls pin to GND
+    name: "Button GPIO35"
+    id: btn_gpio35
+    filters:
+      - delayed_on: 20ms    # debounce
+    on_multi_click:
+      - timing:
+          - ON for at most 500ms
+          - OFF for at least 50ms
+        then:
+          - switch.toggle: living_room_mute
+      - timing:
+          - ON for at least 500ms
+        then:
+          - script.execute: volume_down_script
+
+  # GPIO0 — long press (hold): volume up
+  # GPIO0 is the BOOT button on most ESP32 dev boards (built-in pull-up).
+  - platform: gpio
+    pin:
+      number: GPIO0
+      mode: INPUT_PULLUP
+      inverted: true    # button pulls pin to GND
+    name: "Button GPIO0"
+    id: btn_gpio0
+    filters:
+      - delayed_on: 20ms    # debounce
+    on_multi_click:
+      - timing:
+          - ON for at least 500ms
+        then:
+          - script.execute: volume_up_script
