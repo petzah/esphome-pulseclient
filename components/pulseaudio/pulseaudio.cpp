@@ -175,8 +175,8 @@ void PulseAudioComponent::send_set_volume_() {
     PktBuf pkt;
     pkt.putU32(PA_CMD_SET_SINK_VOLUME);
     pkt.putU32(next_tag_());
-    pkt.putU32(PA_INVALID_INDEX);
-    pkt.putStr("@DEFAULT_SINK@");
+    pkt.putU32(sink_index_);
+    pkt.putStrNull();
     pkt.putCVolume(channels_, vol);
     send_packet_(pkt);
 
@@ -190,8 +190,8 @@ void PulseAudioComponent::send_set_mute_() {
     PktBuf pkt;
     pkt.putU32(PA_CMD_SET_SINK_MUTE);
     pkt.putU32(next_tag_());
-    pkt.putU32(PA_INVALID_INDEX);
-    pkt.putStr("@DEFAULT_SINK@");
+    pkt.putU32(sink_index_);
+    pkt.putStrNull();
     pkt.putBool(muted_);
     send_packet_(pkt);
 
@@ -300,7 +300,7 @@ bool PulseAudioComponent::process_packet_(const uint8_t *payload, uint32_t len) 
 bool PulseAudioComponent::parse_sink_info_reply_(const uint8_t *payload, uint32_t len) {
     TagReader r(payload, len);
 
-    r.expectU32();   // sink index
+    sink_index_ = r.expectU32();
     r.skipStr();     // name
     r.skipStr();     // description
 

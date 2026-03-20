@@ -179,6 +179,7 @@ protected:
     uint32_t    seq_tag_ = 0;
     uint32_t    wait_tag_ = 0;
 
+    uint32_t sink_index_ = PA_INVALID_INDEX;
     uint8_t  channels_ = 2;
     float    volume_   = 50.0f;   // 0-100
     bool     muted_    = false;
