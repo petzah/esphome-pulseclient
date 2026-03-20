@@ -1,0 +1,67 @@
+substitutions:
+  device_name: pipewire-control
+
+esphome:
+  name: ${device_name}
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "${device_name} Fallback"
+    password: !secret ap_password
+
+logger:
+api:
+ota:
+  platform: esphome
+
+external_components:
+  - source:
+      type: local
+      path: components
+
+# ── PulseAudio / PipeWire component ───────────────────────────────────────────
+pulseaudio:
+  host: "192.168.1.100"   # IP of machine running pipewire-pulse
+  port: 4713
+  volume:
+    name: "Living Room Volume"
+    icon: mdi:volume-high
+  mute:
+    name: "Living Room Mute"
+    icon: mdi:volume-off
+
+# ── Rotary encoder → volume ────────────────────────────────────────────────────
+sensor:
+  - platform: rotary_encoder
+    name: "Volume Encoder"
+    pin_a: GPIO18
+    pin_b: GPIO19
+    resolution: 1
+    on_clockwise:
+      - number.increment:
+          id: living_room_volume
+          cycle: false
+    on_counter_clockwise:
+      - number.decrement:
+          id: living_room_volume
+          cycle: false
+
+# ── Mute button ────────────────────────────────────────────────────────────────
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO21
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Mute Button"
+    filters:
+      - delayed_on: 10ms     # debounce
+    on_press:
+      - switch.toggle: living_room_mute
