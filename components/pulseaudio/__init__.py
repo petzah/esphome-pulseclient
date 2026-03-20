@@ -39,12 +39,8 @@ def validate_cookie(value):
         raise cv.Invalid("cookie must contain only hex characters (0-9, a-f)")
     return value
 
-VOLUME_SCHEMA = number.NUMBER_SCHEMA.extend(
-    {cv.GenerateID(): cv.declare_id(PulseAudioVolumeNumber)}
-)
-MUTE_SCHEMA = switch.SWITCH_SCHEMA.extend(
-    {cv.GenerateID(): cv.declare_id(PulseAudioMuteSwitch)}
-)
+VOLUME_SCHEMA = number.number_schema(PulseAudioVolumeNumber)
+MUTE_SCHEMA   = switch.switch_schema(PulseAudioMuteSwitch)
 
 CONFIG_SCHEMA = cv.Schema(
     {
