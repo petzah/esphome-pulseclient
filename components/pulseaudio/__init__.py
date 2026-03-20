@@ -3,13 +3,14 @@ import esphome.config_validation as cv
 from esphome.components import number, switch
 from esphome.const import (
     CONF_ID,
-    CONF_HOST,
-    CONF_PORT,
     UNIT_PERCENT,
     ICON_VOLUME_HIGH,
     ICON_VOLUME_OFF,
     DEVICE_CLASS_SOUND,
 )
+
+CONF_HOST = "host"
+CONF_PORT = "port"
 
 CODEOWNERS = ["@you"]
 DEPENDENCIES = ["network"]
