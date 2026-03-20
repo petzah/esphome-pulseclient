@@ -23,8 +23,8 @@ static constexpr uint32_t PA_CMD_ERROR            = 0;
 static constexpr uint32_t PA_CMD_AUTH             = 8;
 static constexpr uint32_t PA_CMD_SET_CLIENT_NAME  = 9;
 static constexpr uint32_t PA_CMD_GET_SINK_INFO    = 21;
-static constexpr uint32_t PA_CMD_SET_SINK_VOLUME  = 37;
-static constexpr uint32_t PA_CMD_SET_SINK_MUTE    = 40;
+static constexpr uint32_t PA_CMD_SET_SINK_VOLUME  = 36;
+static constexpr uint32_t PA_CMD_SET_SINK_MUTE    = 39;
 
 static constexpr uint8_t PA_TAG_U32         = 'L';
 static constexpr uint8_t PA_TAG_ARBITRARY   = 'x';
