@@ -22,9 +22,8 @@ ota:
   platform: esphome
 
 external_components:
-  - source:
-      type: git
-      url: https://github.com/petzah/esphome-pulseclient
+  - source: github://petzah/esphome-pulseclient
+    components: [ pulseaudio ]
 
 # ── PulseAudio / PipeWire component ───────────────────────────────────────────
 pulseaudio:
