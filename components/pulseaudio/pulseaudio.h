@@ -71,6 +71,7 @@ struct PktBuf {
         putRawU8(PA_TAG_PROPLIST);
         putStr(key);
         uint32_t vlen = strlen(value) + 1;
+        putU32(vlen);                              // length before the arbitrary blob
         putArbitrary((const uint8_t *)value, vlen);
         putStrNull();
     }
